@@ -9,12 +9,13 @@ from bs4 import BeautifulSoup
 
 from .exceptions import NoMatchingDataError, PaginationError
 from .mappings import DOMAIN_MAPPINGS, BIDDING_ZONES, TIMEZONE_MAPPINGS, NEIGHBOURS
-from .misc import year_blocks
-from .parsers import parse_prices, parse_loads, parse_generation, parse_generation_per_plant, \
+from .misc import year_blocks, day_blocks
+from .parsers import parse_prices, parse_loads, parse_generation, \
+    parse_generation_per_plant, parse_installed_capacity_per_plant, \
     parse_crossborder_flows, parse_imbalance_prices, parse_unavailabilities
 
 __title__ = "entsoe-py"
-__version__ = "0.2.5"
+__version__ = "0.2.10"
 __author__ = "EnergieID.be"
 __license__ = "MIT"
 
@@ -287,7 +288,7 @@ class EntsoeRawClient:
 
         response = self.base_request(params=params, start=start, end=end)
         return response.text
-    
+
     def query_generation_per_plant(self, country_code, start, end, psr_type=None, lookup_bzones=False):
         """
         Parameters
@@ -337,6 +338,33 @@ class EntsoeRawClient:
         domain = DOMAIN_MAPPINGS[country_code]
         params = {
             'documentType': 'A68',
+            'processType': 'A33',
+            'in_Domain': domain,
+        }
+        if psr_type:
+            params.update({'psrType': psr_type})
+
+        response = self.base_request(params=params, start=start, end=end)
+        return response.text
+
+    def query_installed_generation_capacity_per_unit(self, country_code,
+                                                      start, end, psr_type=None):
+        """
+        Parameters
+        ----------
+        country_code : str
+        start : pd.Timestamp
+        end : pd.Timestamp
+        psr_type : str
+            filter query for a specific psr type
+
+        Returns
+        -------
+        str
+        """
+        domain = DOMAIN_MAPPINGS[country_code]
+        params = {
+            'documentType': 'A71',
             'processType': 'A33',
             'in_Domain': domain,
         }
@@ -541,6 +569,20 @@ def year_limited(func):
     return year_wrapper
 
 
+def day_limited(func):
+    """Deals with calls where you cannot query more than a year, by splitting
+    the call up in blocks per year"""
+
+    @wraps(func)
+    def day_wrapper(*args, start, end, **kwargs):
+        blocks = day_blocks(start, end)
+        frames = [func(*args, start=_start, end=_end, **kwargs) for _start, _end
+                  in blocks]
+        df = pd.concat(frames)
+        return df
+
+    return day_wrapper
+
 class EntsoePandasClient(EntsoeRawClient):
     @year_limited
     def query_day_ahead_prices(self, country_code, start, end) -> pd.Series:
@@ -559,6 +601,7 @@ class EntsoePandasClient(EntsoeRawClient):
             country_code=country_code, start=start, end=end)
         series = parse_prices(text)
         series = series.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        series = series.truncate(before=start, after=end)
         return series
 
     @year_limited
@@ -578,6 +621,7 @@ class EntsoePandasClient(EntsoeRawClient):
             country_code=country_code, start=start, end=end)
         series = parse_loads(text)
         series = series.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        series = series.truncate(before=start, after=end)
         return series
 
     @year_limited
@@ -596,6 +640,7 @@ class EntsoePandasClient(EntsoeRawClient):
             country_code=country_code, start=start, end=end)
         series = parse_loads(text)
         series = series.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        series = series.truncate(before=start, after=end)
         return series
 
     @year_limited
@@ -614,6 +659,7 @@ class EntsoePandasClient(EntsoeRawClient):
             country_code=country_code, start=start, end=end)
         series = parse_loads(text)
         series = series.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        series = series.truncate(before=start, after=end)
         return series
 
     @year_limited
@@ -639,6 +685,7 @@ class EntsoePandasClient(EntsoeRawClient):
             lookup_bzones=lookup_bzones)
         df = parse_generation(text)
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
         return df
 
     @year_limited
@@ -664,6 +711,7 @@ class EntsoePandasClient(EntsoeRawClient):
             lookup_bzones=lookup_bzones)
         df = parse_generation(text)
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
         return df
 
     @year_limited
@@ -687,6 +735,29 @@ class EntsoePandasClient(EntsoeRawClient):
             country_code=country_code, start=start, end=end, psr_type=psr_type)
         df = parse_generation(text)
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
+        return df
+
+    @year_limited
+    def query_installed_generation_capacity_per_unit(self, country_code,
+                                                     start, end, psr_type=None):
+        """
+        Parameters
+        ----------
+        country_code : str
+        start : pd.Timestamp
+        end : pd.Timestamp
+        psr_type : str
+            filter query for a specific psr type
+
+        Returns
+        -------
+        pd.DataFrame
+        """
+        text = super(
+            EntsoePandasClient, self).query_installed_generation_capacity_per_unit(
+            country_code=country_code, start=start, end=end, psr_type=psr_type)
+        df = parse_installed_capacity_per_plant(text)
         return df
 
     @year_limited
@@ -710,6 +781,7 @@ class EntsoePandasClient(EntsoeRawClient):
             country_code_to=country_code_to, start=start, end=end, lookup_bzones=lookup_bzones)
         ts = parse_crossborder_flows(text)
         ts = ts.tz_convert(TIMEZONE_MAPPINGS[country_code_from])
+        ts = ts.truncate(before=start, after=end)
         return ts
 
     @year_limited
@@ -731,6 +803,7 @@ class EntsoePandasClient(EntsoeRawClient):
             country_code=country_code, start=start, end=end, psr_type=psr_type)
         df = parse_imbalance_prices(text)
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
         return df
 
     @year_limited
@@ -762,11 +835,9 @@ class EntsoePandasClient(EntsoeRawClient):
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
         df['start'] = df['start'].apply(lambda x: x.tz_convert(TIMEZONE_MAPPINGS[country_code]))
         df['end'] = df['end'].apply(lambda x: x.tz_convert(TIMEZONE_MAPPINGS[country_code]))
+        df = df.truncate(before=start, after=end)
         return df
 
-
-    @year_limited
-    @paginated
     def query_unavailability_of_generation_units(self, country_code, start, end,
                                      docstatus=None, periodstartupdate = None,
                                      periodendupdate = None):
@@ -784,19 +855,12 @@ class EntsoePandasClient(EntsoeRawClient):
         -------
         pd.DataFrame
         """
-        content = super(EntsoePandasClient,
-                        self).query_unavailability_of_generation_units(
-            country_code=country_code, start=start, end=end,
-            docstatus=docstatus,  periodstartupdate = periodstartupdate,
-            periodendupdate = periodendupdate)
-        df = parse_unavailabilities(content)
-        df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
-        df['start'] = df['start'].apply(lambda x: x.tz_convert(TIMEZONE_MAPPINGS[country_code]))
-        df['end'] = df['end'].apply(lambda x: x.tz_convert(TIMEZONE_MAPPINGS[country_code]))
+
+        df = self.query_unavailability(country_code=country_code, start=start, end=end,
+                                       doctype="A80", docstatus=docstatus, periodstartupdate=periodstartupdate,
+                                       periodendupdate=periodendupdate)
         return df
 
-    @year_limited
-    @paginated
     def query_unavailability_of_production_units(self, country_code, start, end,
                                      docstatus=None, periodstartupdate = None,
                                      periodendupdate = None):
@@ -814,15 +878,9 @@ class EntsoePandasClient(EntsoeRawClient):
         -------
         pd.DataFrame
         """
-        content = super(EntsoePandasClient,
-                        self).query_unavailability_of_production_units(
-            country_code=country_code, start=start, end=end,
-            docstatus=docstatus, periodstartupdate = periodstartupdate,
-            periodendupdate = periodendupdate)
-        df = parse_unavailabilities(content)
-        df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
-        df['start'] = df['start'].apply(lambda x: x.tz_convert(TIMEZONE_MAPPINGS[country_code]))
-        df['end'] = df['end'].apply(lambda x: x.tz_convert(TIMEZONE_MAPPINGS[country_code]))
+        df = self.query_unavailability(country_code=country_code, start=start, end=end,
+                                       doctype="A77", docstatus=docstatus, periodstartupdate=periodstartupdate,
+                                       periodendupdate=periodendupdate)
         return df
 
     def query_withdrawn_unavailability_of_generation_units(
@@ -840,9 +898,10 @@ class EntsoePandasClient(EntsoeRawClient):
         """
         df = self.query_unavailability_of_generation_units(
             country_code=country_code, start=start, end=end, docstatus='A13')
+        df = df.truncate(before=start, after=end)
         return df
 
-    @year_limited
+    @day_limited
     def query_generation_per_plant(self, country_code, start, end, psr_type=None,lookup_bzones=False):
         """
         Parameters
@@ -864,6 +923,7 @@ class EntsoePandasClient(EntsoeRawClient):
             lookup_bzones=lookup_bzones)
         df = parse_generation_per_plant(text)
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
         return df
 
     def query_import(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
@@ -883,6 +943,7 @@ class EntsoePandasClient(EntsoeRawClient):
         df = pd.concat(imports, axis=1)
         df = df.loc[:, (df != 0).any(axis=0)]  # drop columns that contain only zero's
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
         return df
 
     def query_generation_import(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
@@ -894,4 +955,5 @@ class EntsoePandasClient(EntsoeRawClient):
 
         data = {f'Generation': generation, f'Import': imports}
         df = pd.concat(data.values(), axis=1, keys=data.keys())
+        df = df.truncate(before=start, after=end)
         return df
