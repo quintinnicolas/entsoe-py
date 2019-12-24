@@ -6,8 +6,6 @@ Created on Mon Dec 23 17:11:03 2019
 """
 
 import entsoe
-from datetime import datetime
-from datetime import timedelta
 import pandas as pd
 from entsoe.mappings import BIDDING_ZONES
 
@@ -22,15 +20,14 @@ PROXY = {"http":"http://10.42.32.29:8080",
 connect = entsoe.EntsoePandasClient(api_key=TOKEN, proxies = PROXY, retry_count=20, retry_delay=30)
 
 #Prepare arguments
-end = datetime.today().date()
-deltadays = 2
-start = end + timedelta(days=-deltadays)
+year = 2019
 domain = list(BIDDING_ZONES)
+domain = ["BE","NL"]
+start = pd.Timestamp("%i/01/01 00:00" % year)
+end = pd.Timestamp("%i/01/01 00:00" % (year + 1))
 
 #Start query
 df_list = []   
-start = pd.Timestamp(start)
-end = pd.Timestamp(end)
 for country in domain:
     try:
         df_prices = connect.query_day_ahead_prices(country_code=country,
@@ -46,5 +43,5 @@ for country in domain:
         df_prices = None
 
     df_list.append(df_prices)
-df = pd.concat(df_list, 1, keys = domain, names = ["country"])
+df = pd.concat(df_list, 1, keys = domain, names = "country")
 df.to_csv('DA_prices_query.csv')
