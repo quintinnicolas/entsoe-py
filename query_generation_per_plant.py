@@ -11,10 +11,10 @@ PROXY = {"http":"http://10.42.32.29:8080",
          
 e = entsoe.EntsoePandasClient(api_key=TOKEN, proxies = PROXY, retry_count=20, retry_delay=30)
 
-start = pd.Timestamp('20190814', tz='Europe/Brussels')
-end = pd.Timestamp('20190815', tz='Europe/Brussels')
+start = pd.Timestamp('20191201', tz='Europe/Brussels')
+end = pd.Timestamp('20191231', tz='Europe/Brussels')
 
-domains = ["BE"]
+domains = ["ES"]
 
 lst = list()
 for country in domains:
