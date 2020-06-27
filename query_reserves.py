@@ -16,6 +16,7 @@ TOKEN = "8d4721aa-8bfd-49d9-9156-a790a04b837e"
 #D10 Proxies
 PROXY = {"http":"http://10.42.32.29:8080",
          "https":"https://10.42.32.29:8080"}
+PROXY = {}
 
 #Connect to client
 connect = entsoe.EntsoePandasClient(api_key=TOKEN, proxies = PROXY, retry_count=20, retry_delay=30)
