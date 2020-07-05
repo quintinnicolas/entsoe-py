@@ -1251,7 +1251,7 @@ class EntsoePandasClient(EntsoeRawClient):
             im.name = neighbour
             imports.append(im)
         df = pd.concat(imports, axis=1)
-        df = df.loc[:, (df != 0).any(axis=0)]  # drop columns that contain only zero's
+        #df = df.loc[:, (df != 0).any(axis=0)]  # drop columns that contain only zero's
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
         df = df.truncate(before=start, after=end)
         return df
@@ -1265,5 +1265,78 @@ class EntsoePandasClient(EntsoeRawClient):
 
         data = {f'Generation': generation, f'Import': imports}
         df = pd.concat(data.values(), axis=1, keys=data.keys())
+        df = df.truncate(before=start, after=end)
+        return df
+        
+    def query_export(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """
+        Adds together all outgoing cross-border flows to a country
+        The neighbours of a country are given by the NEIGHBOURS mapping
+        """
+        exports = []
+        for neighbour in NEIGHBOURS[country_code]:
+            try:
+                ex = self.query_crossborder_flows(country_code_from=country_code, country_code_to=neighbour, end=end,
+                                                  start=start, lookup_bzones=True)
+            except NoMatchingDataError:
+                continue
+            ex.name = neighbour
+            exports.append(ex)
+        df = pd.concat(exports, axis=1)
+        #df = df.loc[:, (df != 0).any(axis=0)]  # drop columns that contain only zero's
+        df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
+        return df
+    
+    def query_generation_import_export(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """Query the combination of both domestic generation, imports, and exports"""
+        generation = self.query_generation(country_code=country_code, end=end, start=start, lookup_bzones=True)
+        generation = generation.loc[:, (generation != 0).any(axis=0)]  # drop columns that contain only zero's
+        generation = generation.resample('H').sum()
+        imports = self.query_import(country_code=country_code, start=start, end=end)
+        exports = self.query_export(country_code=country_code, start=start, end=end)
+
+        data = {f'Generation': generation, f'Import': imports, f'Export': exports}
+        df = pd.concat(data.values(), axis=1, keys=data.keys())
+        df = df.truncate(before=start, after=end)
+        return df
+    
+    def query_scheduled_import(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """
+        Adds together all incoming cross-border flows to a country
+        The neighbours of a country are given by the NEIGHBOURS mapping
+        """
+        imports = []
+        for neighbour in NEIGHBOURS[country_code]:
+            try:
+                im = self.query_scheduled_exchanges(country_code_from=neighbour, country_code_to=country_code, end=end,
+                                                  start=start, lookup_bzones=True)
+            except NoMatchingDataError:
+                continue
+            im.name = neighbour
+            imports.append(im)
+        df = pd.concat(imports, axis=1)
+        #df = df.loc[:, (df != 0).any(axis=0)]  # drop columns that contain only zero's
+        df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
+        df = df.truncate(before=start, after=end)
+        return df
+    
+    def query_scheduled_export(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """
+        Adds together all outgoing cross-border flows to a country
+        The neighbours of a country are given by the NEIGHBOURS mapping
+        """
+        exports = []
+        for neighbour in NEIGHBOURS[country_code]:
+            try:
+                ex = self.query_scheduled_exchanges(country_code_from=country_code, country_code_to=neighbour, end=end,
+                                                  start=start, lookup_bzones=True)
+            except NoMatchingDataError:
+                continue
+            ex.name = neighbour
+            exports.append(ex)
+        df = pd.concat(exports, axis=1)
+        #df = df.loc[:, (df != 0).any(axis=0)]  # drop columns that contain only zero's
+        df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
         df = df.truncate(before=start, after=end)
         return df
