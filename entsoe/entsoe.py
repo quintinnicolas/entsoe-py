@@ -1340,3 +1340,16 @@ class EntsoePandasClient(EntsoeRawClient):
         df = df.tz_convert(TIMEZONE_MAPPINGS[country_code])
         df = df.truncate(before=start, after=end)
         return df
+    
+    def query_scheduled_import_export(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """Query the combination of scheduled imports and exports"""
+        #generation = self.query_generation(country_code=country_code, end=end, start=start, lookup_bzones=True)
+        #generation = generation.loc[:, (generation != 0).any(axis=0)]  # drop columns that contain only zero's
+        #generation = generation.resample('H').sum()
+        imports = self.query_scheduled_import(country_code=country_code, start=start, end=end)
+        exports = self.query_scheduled_export(country_code=country_code, start=start, end=end)
+
+        data = {f'Import': imports, f'Export': exports}
+        df = pd.concat(data.values(), axis=1, keys=data.keys())
+        df = df.truncate(before=start, after=end)
+        return df
