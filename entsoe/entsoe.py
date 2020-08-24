@@ -1353,3 +1353,13 @@ class EntsoePandasClient(EntsoeRawClient):
         df = pd.concat(data.values(), axis=1, keys=data.keys())
         df = df.truncate(before=start, after=end)
         return df
+    
+    def query_actual_import_export(self, country_code: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """Query the combination of imports, and exports"""
+        imports = self.query_import(country_code=country_code, start=start, end=end)
+        exports = self.query_export(country_code=country_code, start=start, end=end)
+
+        data = {f'Import': imports, f'Export': exports}
+        df = pd.concat(data.values(), axis=1, keys=data.keys())
+        df = df.truncate(before=start, after=end)
+        return df
